@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pizarra colaborativa</title>
+  <meta name="description" content="Pizarra digital colaborativa con dibujo, texto, borrador y exportación a PNG/JPEG/GIF" />
+  <style>
+    :root{
+      --bg:#0f172a; /* slate-900 */
+      --panel:#111827; /* gray-900 */
+      --muted:#334155; /* slate-600 */
+      --text:#e5e7eb; /* gray-200 */
+      --accent:#22d3ee; /* cyan-400 */
+      --accent-2:#a78bfa; /* violet-400 */
+      --danger:#ef4444; /* red-500 */
+      --card:#0b1220;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;background:linear-gradient(180deg,#0b1120, #0f172a 40%, #0b1120);
+      color:var(--text);font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial;
+      display:flex;min-height:100vh;
+    }
+    .app{display:grid;grid-template-columns:160px 1fr 160px;gap:12px;width:100%;padding:12px}
+
+    /* side banners */
+    .banner{
+      width:160px;min-width:160px;display:flex;justify-content:center;align-items:center;
+      background:linear-gradient(180deg,#0b1120,#0b0f1a);border:1px solid #1f2937;border-radius:16px;
+      box-shadow:0 10px 30px rgba(0,0,0,.35);height:100%;
+    }
+    .banner iframe,.banner img{width:160px;height:600px;border:0;border-radius:12px}
+
+    /* center column */
+    .workarea{display:grid;grid-template-rows:auto 1fr auto;gap:12px}
+
+    .toolbar, .statusbar{
+      display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+      background:rgba(17,24,39,.75);backdrop-filter:blur(10px);border:1px solid #1f2937;border-radius:16px;padding:10px 12px
+    }
+    .toolbar-left, .toolbar-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+    .group{display:flex;gap:8px;align-items:center;background:rgba(2,6,23,.6);border:1px solid #1f2937;padding:8px 10px;border-radius:14px}
+
+    label{font-size:12px;color:#cbd5e1}
+    select, input[type="number"], input[type="text"], button{
+      border:1px solid #334155;background:#0b1220;color:var(--text);border-radius:12px;padding:8px 10px;font-size:14px
+    }
+    input[type="range"]{accent-color:var(--accent)}
+    input[type="color"]{padding:0;border-radius:8px;height:34px;width:40px;border:1px solid #334155;background:#0b1220}
+    button{cursor:pointer;transition:transform .05s ease, box-shadow .2s ease}
+    button:hover{box-shadow:0 0 0 2px rgba(34,211,238,.15),0 8px 20px rgba(0,0,0,.4)}
+    button:active{transform:translateY(1px)}
+
+    .btn-primary{background:linear-gradient(135deg, rgba(34,211,238,.2), rgba(167,139,250,.2));border:1px solid #334155}
+    .btn-danger{background:rgba(239,68,68,.15);border-color:#7f1d1d}
+
+    .canvas-wrap{
+      position:relative;background:radial-gradient(1200px 600px at 50% 0%, rgba(56,189,248,.1), transparent 40%), #0b1120;
+      border:1px solid #1f2937;border-radius:16px;overflow:hidden;display:flex;align-items:center;justify-content:center
+    }
+    canvas{background:#0a0f1a;max-width:100%;max-height:100%;width:100%;height:100%}
+    .floating-tip{position:absolute;top:12px;left:12px;background:rgba(2,6,23,.6);border:1px solid #1f2937;padding:6px 10px;border-radius:999px;font-size:12px;color:#cbd5e1}
+
+    .statusbar{justify-content:space-between}
+    .statusbar .info{font-size:12px;color:#94a3b8}
+
+    /* responsive */
+    @media (max-width: 1200px){
+      .app{grid-template-columns:1fr;}
+      .banner{display:none}
+    }
+    @media (max-width: 640px){
+      .toolbar, .statusbar{gap:8px}
+      .group{width:100%;justify-content:space-between}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Left Banner (replace src with your ad image or iframe) -->
+    <aside class="banner" aria-label="Banner izquierdo">
+      <iframe srcdoc="<style>body{margin:0;display:grid;place-items:center;background:#020617;color:#e2e8f0;font-family:system-ui} .card{width:160px;height:600px;display:grid;place-items:center;background:linear-gradient(180deg,#0a0f1a,#0b1120);font-size:14px}</style><div class='card'>160×600<br/>Espacio publicitario</div>"></iframe>
+    </aside>
+
+    <!-- Center Workspace -->
+    <main class="workarea">
+      <header class="toolbar" role="toolbar" aria-label="Barra de herramientas">
+        <div class="toolbar-left">
+          <div class="group">
+            <label for="lang">🌐 <span data-i18n="idioma">Idioma</span></label>
+            <select id="lang" aria-label="Idioma">
+              <option value="es">Español</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div class="group">
+            <label for="tool">🛠️ <span data-i18n="herramienta">Herramienta</span></label>
+            <select id="tool">
+              <option value="pen">✏️ <span data-i18n="lapiz">Lápiz</span></option>
+              <option value="eraser">🧽 <span data-i18n="borrador">Borrador</span></option>
+              <option value="text">🔤 <span data-i18n="texto">Texto</span></option>
+            </select>
+          </div>
+          <div class="group">
+            <label for="color">🎨 <span data-i18n="color">Color</span></label>
+            <input id="color" type="color" value="#22d3ee" />
+            <label for="size">🧵 <span data-i18n="grosor">Grosor</span></label>
+            <input id="size" type="range" min="1" max="60" value="6" />
+            <input id="textInput" type="text" placeholder="Escribe y toca el lienzo" style="display:none;min-width:200px" />
+          </div>
+        </div>
+        <div class="toolbar-right">
+          <div class="group">
+            <button id="undoBtn" title="Deshacer" class="btn-primary">↶ <span data-i18n="deshacer">Deshacer</span></button>
+            <button id="redoBtn" title="Rehacer" class="btn-primary">↷ <span data-i18n="rehacer">Rehacer</span></button>
+          </div>
+          <div class="group">
+            <button id="clearBtn" class="btn-danger">🗑️ <span data-i18n="limpiar">Limpiar</span></button>
+          </div>
+          <div class="group">
+            <button id="savePNGBtn" class="btn-primary">⬇️ PNG</button>
+            <button id="saveJPEGBtn" class="btn-primary">⬇️ JPEG</button>
+          </div>
+          <div class="group">
+            <button id="addFrameBtn" class="btn-primary">➕ <span data-i18n="addFrame">Añadir frame</span></button>
+            <button id="exportGifBtn" class="btn-primary">🎞️ GIF</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="canvas-wrap">
+        <div class="floating-tip" id="tip">💡 Dibuja con el mouse o el dedo</div>
+        <canvas id="board" width="1400" height="800" aria-label="Lienzo para dibujar"></canvas>
+      </section>
+
+      <footer class="statusbar" role="status">
+        <div class="info" id="status">Listo</div>
+        <div class="info" id="framesInfo">Frames: 0</div>
+      </footer>
+    </main>
+
+    <!-- Right Banner -->
+    <aside class="banner" aria-label="Banner derecho">
+      <img src="https://dummyimage.com/160x600/0b1120/94a3b8&text=160%C3%97600+Ad" alt="Espacio publicitario"/>
+    </aside>
+  </div>
+
+  <!-- GIF.js CDN (encoder) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js" integrity="sha512-VrR2zpd5o0i6iH1o8nHHv8j2m/1A5J6EY8oR4xYBvYh0A7K6mF2sGJf2QWJQ8s0n5M1qgVb8r3oQhM8m6pU5Zg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const canvas = $('#board');
+    const ctx = canvas.getContext('2d');
+
+    // === Responsive, HiDPI-safe canvas sizing without ResizeObserver loops ===
+    const wrapper = canvas.parentElement;
+    let resizeScheduled = false;
+    function resizeCanvas(){
+      const ratio = window.devicePixelRatio || 1;
+      const rect = wrapper.getBoundingClientRect();
+      const cssW = Math.max(1, Math.floor(rect.width));
+      const cssH = Math.max(1, Math.floor(rect.height));
+      const dprW = Math.floor(cssW * ratio);
+      const dprH = Math.floor(cssH * ratio);
+      if (canvas.width !== dprW || canvas.height !== dprH){
+        canvas.width = dprW; // resets state
+        canvas.height = dprH;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0); // avoid cumulative scale()
+        redrawFromHistory();
+      }
+    }
+    function scheduleResize(){
+      if(resizeScheduled) return;
+      resizeScheduled = true;
+      requestAnimationFrame(()=>{ resizeScheduled = false; resizeCanvas(); });
+    }
+
+    // Observe the WRAPPER, not the canvas itself, to avoid feedback loop
+    if('ResizeObserver' in window){
+      const ro = new ResizeObserver(() => scheduleResize());
+      ro.observe(wrapper);
+    } else {
+      window.addEventListener('resize', scheduleResize);
+    }
+
+    // State
+    let drawing = false;
+    let last = {x:0, y:0};
+    let tool = 'pen';
+    let color = $('#color').value;
+    let size = +$('#size').value;
+    let textBuffer = '';
+
+    // History for undo/redo
+    const history = [];
+    let historyIndex = -1;
+    function pushHistory(){
+      if(historyIndex < history.length - 1){ history.splice(historyIndex + 1); }
+      history.push(canvas.toDataURL('image/png'));
+      if(history.length > 50){ history.shift(); }
+      historyIndex = history.length - 1;
+      updateStatus('Cambio guardado');
+    }
+    function redrawFromHistory(){
+      if(historyIndex < 0) return;
+      const ratio = window.devicePixelRatio || 1;
+      const cssW = canvas.width / ratio;
+      const cssH = canvas.height / ratio;
+      const img = new Image();
+      img.onload = ()=>{
+        // Clear in device pixels, then draw in CSS pixels (transform already set)
+        ctx.save();
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.restore();
+        ctx.drawImage(img, 0, 0, cssW, cssH);
+      };
+      img.src = history[historyIndex];
+    }
+
+    // Initial background
+    function clearCanvas(){
+      const ratio = window.devicePixelRatio || 1;
+      ctx.save();
+      ctx.setTransform(1,0,0,1,0,0); // reset transform for full clear
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.restore();
+      const w = canvas.width/ratio, h = canvas.height/ratio;
+      ctx.fillStyle = '#0a0f1a';
+      ctx.fillRect(0,0,w,h);
+    }
+
+    function setTool(newTool){
+      tool = newTool;
+      $('#textInput').style.display = tool === 'text' ? 'inline-block' : 'none';
+      if(tool === 'eraser'){
+        canvas.style.cursor = 'cell';
+      } else if(tool === 'text'){
+        canvas.style.cursor = 'text';
+      } else {
+        canvas.style.cursor = 'crosshair';
+      }
+      updateStatus(i18n.t('herramienta')+': '+i18n.toolLabel(tool));
+    }
+
+    function strokeLine(from, to){
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = size;
+      if(tool === 'eraser'){
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.strokeStyle = 'rgba(0,0,0,1)';
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = color;
+      }
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+    }
+
+    function drawText(x,y,text){
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = color;
+      ctx.font = `${Math.max(10, size*4)}px ui-sans-serif, system-ui, Arial`;
+      ctx.textBaseline = 'top';
+      const lines = text.split(/\n/);
+      lines.forEach((ln, i)=> ctx.fillText(ln, x, y + i*(size*4+4)));
+      ctx.restore();
+    }
+
+    function posFromEvent(e){
+      const rect = canvas.getBoundingClientRect();
+      let x,y;
+      if(e.touches && e.touches[0]){
+        x = e.touches[0].clientX - rect.left;
+        y = e.touches[0].clientY - rect.top;
+      }else{
+        x = e.clientX - rect.left;
+        y = e.clientY - rect.top;
+      }
+      return {x, y};
+    }
+
+    function startDraw(e){
+      e.preventDefault();
+      const p = posFromEvent(e);
+      drawing = true; last = p;
+      if(tool === 'text'){
+        textBuffer = $('#textInput').value.trim();
+        if(textBuffer){ drawText(p.x, p.y, textBuffer); pushHistory(); }
+        drawing = false; // text is one-shot
+        return;
+      }
+    }
+    function moveDraw(e){
+      if(!drawing) return; e.preventDefault();
+      const p = posFromEvent(e);
+      strokeLine(last, p); last = p;
+    }
+    function endDraw(e){
+      if(!drawing) return; drawing = false; e.preventDefault();
+      pushHistory();
+    }
+
+    // Events
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', moveDraw);
+    window.addEventListener('mouseup', endDraw);
+
+    canvas.addEventListener('touchstart', startDraw, {passive:false});
+    canvas.addEventListener('touchmove', moveDraw, {passive:false});
+    canvas.addEventListener('touchend', endDraw, {passive:false});
+
+    $('#tool').addEventListener('change', e=> setTool(e.target.value));
+    $('#color').addEventListener('change', e=> {color = e.target.value;});
+    $('#size').addEventListener('input', e=> {size = +e.target.value;});
+
+    $('#clearBtn').addEventListener('click', ()=>{ if(confirm(i18n.t('confirmClear'))){ clearCanvas(); pushHistory(); }});
+
+    // Undo/Redo
+    $('#undoBtn').addEventListener('click', ()=>{
+      if(historyIndex>0){ historyIndex--; redrawFromHistory(); updateStatus(i18n.t('deshecho')); }
+    });
+    $('#redoBtn').addEventListener('click', ()=>{
+      if(historyIndex<history.length-1){ historyIndex++; redrawFromHistory(); updateStatus(i18n.t('rehecho')); }
+    });
+
+    // Save PNG/JPEG
+    function downloadDataURL(dataURL, filename){
+      const a = document.createElement('a'); a.href = dataURL; a.download = filename; a.click();
+    }
+    $('#savePNGBtn').addEventListener('click', ()=>{
+      const dataURL = canvas.toDataURL('image/png');
+      downloadDataURL(dataURL, 'pizarra.png');
+    });
+    $('#saveJPEGBtn').addEventListener('click', ()=>{
+      const dataURL = canvas.toDataURL('image/jpeg', 0.92);
+      downloadDataURL(dataURL, 'pizarra.jpg');
+    });
+
+    // GIF frames
+    const frames = [];
+    function updateFramesInfo(){ $('#framesInfo').textContent = `${i18n.t('frames')}: ${frames.length}`; }
+    $('#addFrameBtn').addEventListener('click', ()=>{
+      const off = document.createElement('canvas');
+      off.width = canvas.width; off.height = canvas.height;
+      const octx = off.getContext('2d');
+      octx.drawImage(canvas, 0, 0);
+      frames.push(off);
+      updateFramesInfo();
+      updateStatus(i18n.t('frameAdded'));
+    });
+
+    const GIF_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js';
+    $('#exportGifBtn').addEventListener('click', ()=>{
+      if(frames.length === 0){ alert(i18n.t('noFrames')); return; }
+      updateStatus(i18n.t('rendering'));
+      const gif = new GIF({workers:2, quality:10, workerScript: GIF_WORKER_URL});
+      const delay = 300; // ms per frame
+      frames.forEach(c => gif.addFrame(c, {delay}));
+      gif.on('finished', blob =>{
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'pizarra.gif'; a.click();
+        URL.revokeObjectURL(url);
+        updateStatus(i18n.t('gifReady'));
+      });
+      gif.render();
+    });
+
+    function updateStatus(msg){ $('#status').textContent = msg; }
+
+    // i18n
+    const i18n = {
+      lang:'es',
+      dict:{
+        es:{
+          idioma:'Idioma', herramienta:'Herramienta', lapiz:'Lápiz', borrador:'Borrador', texto:'Texto', color:'Color', grosor:'Grosor',
+          limpiar:'Limpiar', deshacer:'Deshacer', rehacer:'Rehacer', confirmClear:'¿Seguro que deseas limpiar el lienzo?', deshecho:'Deshecho', rehecho:'Rehecho',
+          addFrame:'Añadir frame', frames:'Frames', frameAdded:'Frame añadido', noFrames:'No hay frames. Usa "Añadir frame" antes de exportar.', rendering:'Renderizando GIF...', gifReady:'GIF listo',
+        },
+        en:{
+          idioma:'Language', herramienta:'Tool', lapiz:'Pen', borrador:'Eraser', texto:'Text', color:'Color', grosor:'Size',
+          limpiar:'Clear', deshacer:'Undo', rehacer:'Redo', confirmClear:'Are you sure you want to clear the canvas?', deshecho:'Undone', rehecho:'Redone',
+          addFrame:'Add frame', frames:'Frames', frameAdded:'Frame added', noFrames:'No frames. Use "Add frame" before exporting.', rendering:'Rendering GIF...', gifReady:'GIF ready',
+        }
+      },
+      t(key){ return this.dict[this.lang][key] || key; },
+      toolLabel(t){ return {pen:this.t('lapiz'), eraser:this.t('borrador'), text:this.t('texto')}[t] || t; },
+      apply(){
+        document.querySelectorAll('[data-i18n]').forEach(el=>{
+          const key = el.getAttribute('data-i18n');
+          el.textContent = this.t(key);
+        });
+        $('#tool').querySelectorAll('option').forEach(opt=>{
+          const v = opt.value; opt.textContent = {pen:'✏️ '+this.t('lapiz'), eraser:'🧽 '+this.t('borrador'), text:'🔤 '+this.t('texto')}[v];
+        });
+        updateFramesInfo();
+      }
+    };
+
+    $('#lang').addEventListener('change', e=>{ i18n.lang = e.target.value; i18n.apply(); updateStatus('OK'); });
+
+    // --- Simple self-tests (non-destructive) ---
+    function runSelfTests(){
+      try{
+        console.assert(typeof resizeCanvas === 'function', 'resizeCanvas exists');
+        const h0 = history.length;
+        clearCanvas(); pushHistory();
+        console.assert(history.length === h0 + 1, 'pushHistory increments');
+        const frames0 = frames.length;
+        $('#addFrameBtn').click();
+        console.assert(frames.length === frames0 + 1, 'Add frame works');
+        $('#undoBtn').click();
+        $('#redoBtn').click();
+        console.log('Self-tests passed');
+        updateStatus('Auto-test OK');
+      }catch(err){
+        console.error('Self-tests failed', err);
+        updateStatus('Auto-test falló: '+ err.message);
+      }
+    }
+
+    // bootstrap
+    (function init(){
+      resizeCanvas(); // ensure correct size before drawing
+      clearCanvas();
+      pushHistory();
+      setTool('pen');
+      i18n.apply();
+      setTimeout(()=>{ $('#tip').style.opacity = .0; $('#tip').style.transition='opacity .6s ease'; }, 2500);
+      // defer tests slightly to avoid interfering with first paint
+      setTimeout(runSelfTests, 300);
+    })();
+  </script>
+</body>
+</html>
